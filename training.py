@@ -11,7 +11,8 @@ chao = altura - 50
 velocidade = 5
 gravidade = 0.7
 fonte = pygame.font.Font("Imagens\Fonte\SuperMario256.ttf", 50)
-
+estado_do_jogo = "partida"
+#Partida, Fim e Inicio
 
 tela = pygame.display.set_mode((largura, altura))
 pygame.display.set_caption("Testando")
@@ -47,16 +48,31 @@ plataformas =[
     Plataforma(600, 150)
 ]
 
-na_plataforma = False  #Para identificar se o player está tocando o chão
+
 
 
 plataformas_group = pygame.sprite.Group()
 for plataforma in plataformas:
     plataformas_group.add(plataforma)
     
-
-
-
+#Espinhos
+class Espinhos(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        imagem = pygame.image.load('Imagens\Espinhos\espinhos.png')
+        self.image = pygame.transform.scale(imagem, (100, 20))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+base_espinhos = altura-20
+espinhos = [
+    Espinhos(100, base_espinhos),
+    Espinhos(400, base_espinhos),
+    Espinhos(700, base_espinhos)
+]
+espinhos_group = pygame.sprite.Group()
+for espinho in espinhos:
+    espinhos_group.add(espinho)
 #Moeda
 class Moeda(pygame.sprite.Sprite):
     def __init__(self):
@@ -83,14 +99,54 @@ class Jogador(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = 350
         self.rect.y = 250
+        self.vida = 3
+        self.tomou_dano = False
+        self.morto = False
+        self.baleia = False
+        self.na_plataforma = False  #Para identificar se o player está tocando o chão
+    def perder_vida(self):
+        global estado_do_jogo
+        if self.vida > 0 and self.tomou_dano == False:
+            self.vida -=1
+        if self.vida == 0:
+            self.morto = True
+            estado_do_jogo = "fim"
 
 player = Jogador()
 player_group = pygame.sprite.Group()
 player_group.add(player)
 
+#Poder - Baleia
+class Baleia(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)  
+        imagem = pygame.image.load("Imagens\Poderes\Baleia.png")
+        self.image = pygame.transform.scale(imagem, (140, 140))
+        self.rect = self.image.get_rect()
+        self.rect.x = player.rect.x
+        self.rect.y = player.rect.y
+
+baleia = Baleia()
+baleia_group = pygame.sprite.Group()
+baleia_group.add(baleia)
+
+class Biscoito(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)  
+        imagem = pygame.image.load("Imagens\Poderes\Cookie.png")
+        self.image = pygame.transform.scale(imagem, (30, 30))
+        self.rect = self.image.get_rect()
+        self.rect.x = 600
+        self.rect.y = 100
+
+cookie = Biscoito()
+cookie_group = pygame.sprite.Group()
+cookie_group.add(cookie)
+
+
+
 
 #Funções:
-
 
 
 def desenhar():
@@ -103,8 +159,15 @@ def desenhar():
 
     player_group.draw(tela)
 
+    espinhos_group.draw(tela)
+
+    cookie_group.draw(tela)
+
     label_moedas = fonte.render(f"Moedas: {contador_moeda}", True, branco)
     tela.blit(label_moedas, (20,20))
+
+    label_vida = fonte.render(f"Vida(s): {player.vida}", True, branco)
+    tela.blit(label_vida, (largura-300, 20))
 
     #Atualizar a tela
     pygame.display.flip()
@@ -132,10 +195,10 @@ def inputs():
     if teclas[pygame.K_w] and player.rect.y >= chao - 50:  # pulo, somente no chão
         vel_y = -velocidade*4
     
-    if teclas[pygame.K_w] and na_plataforma:  # pulo nas plataformas
+    if teclas[pygame.K_w] and player.na_plataforma:  # pulo nas plataformas
         vel_y = -velocidade*4
 
-def fisica():
+def fisica():                                                                                                                                                   
     global vel_y
     # aplica gravidade
     vel_y += gravidade
@@ -152,8 +215,8 @@ def fisica():
 
 def colisoes():
     global vel_y
-    global na_plataforma
-    na_plataforma = False
+    
+    player.na_plataforma = False
     global contador_moeda  
 
     # colisão com chão
@@ -174,7 +237,7 @@ def colisoes():
             if vel_y >= 0 and player.rect.bottom - vel_y <= plat.rect.top +1:
                 player.rect.bottom = plat.rect.top
                 vel_y = 0
-                na_plataforma = True
+                player.na_plataforma = True
 
         # Colisão vindo de baixo (batendo a cabeça)
             elif vel_y < 0 and player.rect.top - vel_y >= plat.rect.bottom -1:
@@ -193,22 +256,77 @@ def colisoes():
         moeda.rect.x = random.randint(0, largura - moeda.rect.width)
         moeda.rect.y = random.randint(0, altura - moeda.rect.height)
         contador_moeda += 1
+    
+    #Colisão com os espinhos:
+
+    espinhos_colididos = pygame.sprite.spritecollide(player, espinhos_group, False)
+    if espinhos_colididos:
+        player.perder_vida()
+        player.tomou_dano = True
+    else:
+        player.tomou_dano = False
+
+    #Pegar cookie:
+    cookies_pegos = pygame.sprite.spritecollide(player, cookie_group, True)
+    if cookies_pegos:
+        player.baleia = True
+
+
+
+def final():
+    tela.fill(preto)
+    label_pontuacao = fonte.render(f"Seus pontos: {contador_moeda}", True, dourado)
+    tela.blit(label_pontuacao, (largura/2-200, altura/2-200))
+    label_fim = fonte.render("Fim de Jogo", False, vermelho)
+    tela.blit(label_fim, (largura/2-200, altura/2-70))
+    pygame.display.flip()
         
+
+def poder_baleia():
+
+    global vel_y
+
+    if player.baleia == True:
+        teclas = pygame.key.get_pressed()
+        if vel_y != 0 and teclas[pygame.K_s]:
+            vel_y += 10
+            baleia.rect.center = player.rect.center
+            baleia_group.draw(tela)
+            #Colisão baleia e espinhos:
+            espinhos_esmagados = pygame.sprite.spritecollide(baleia, espinhos_group, True)
+            player.tomou_dano = True
+            if espinhos_esmagados:
+                player.vida += 1
+
+            pygame.display.flip()
+
+
+
 rodando = True
 
 
 #Loop principal
 while rodando == True:
     pygame.time.delay(30)
-    
+
     eventos()
 
     inputs()
     
-    fisica()
+    if estado_do_jogo == "partida":
+        
+        fisica()
 
-    colisoes()
+        colisoes()
+
+        
+        
+        desenhar() 
+
+        poder_baleia()
     
-    desenhar() 
+    if estado_do_jogo == "fim":
+        final()
+
     
 pygame.QUIT
